@@ -1,0 +1,12 @@
+              .;;;;;;;;;;;;;;;;;;;;;.
+             ;;; Xinb is not a bot ;;;
+              .;;;;;;;;;;;;;;;;;;;;;.
+
+Small program for getting shell on my computers and servers
+via jabber.
+
+Further I plan using CMake.
+
+BUILD:
+mkdir -v build
+make

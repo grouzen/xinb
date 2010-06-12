@@ -1,0 +1,15 @@
+# -*- Org -*- 
+#
+
+* Project's goals:
+** TODO Shell over jabber/xmpp;
+** TODO Sending messages from cli, e.g for notices about problems on servers, 
+   reports et cetera.
+   
+* Features:
+** TODO Configuration file.
+** TODO Switching modes:
+*** TODO Shell
+*** TODO Receiving reports
+*** TODO Sending custom messages to something recipient
+
