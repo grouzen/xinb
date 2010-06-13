@@ -96,9 +96,10 @@ static int command_get_type(gchar *c)
     return -1;
 }
 
-static GArray *command_get_arg(gchar *c, gint which)
+static gchar **command_get_arg(gchar *c, gint which)
 {
     GArray *args;
+    gchar **ret;
     gchar arg[COMMAND_MAX_ARG_LENGTH];
     gint i, j = 0, argn = which;
 
@@ -131,10 +132,20 @@ static GArray *command_get_arg(gchar *c, gint which)
     }
 
     if(args->len) {
-        return args;
+        gchar **normal_args = g_malloc0(sizeof(gchar) * args->len);
+
+        for(i = 0; i < args->len; i++) {
+            normal_args[i] = g_strdup(g_array_index(args, gchar*, i));
+        }
+        
+        ret = normal_args;
+    } else {
+        ret = NULL;
     }
 
-    return NULL;
+    g_array_free(args, TRUE);
+
+    return ret;
 }
 
 static gchar *command_usage(gint type)
@@ -160,7 +171,7 @@ gboolean command_run(struct xinb *x, gchar *c)
 {
     struct command *com;
     gint type;
-    GArray *arg1, *rest;
+    gchar **arg1, **rest;
     
     x->to = g_strdup(g_hash_table_lookup(x->account, "owner"));
 
@@ -193,8 +204,8 @@ gboolean command_run(struct xinb *x, gchar *c)
         goto send_error;
     }
 
-    g_array_free(arg1, TRUE);
-    g_array_free(rest, TRUE);
+    g_strfreev(arg1);
+    g_strfreev(rest);
     return TRUE;
     
     send_error:

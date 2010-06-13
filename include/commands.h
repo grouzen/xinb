@@ -26,8 +26,6 @@ struct command {
     } value;
 };
 
-#define COMMAND_MAX_LENGTH 256
-
 gboolean command_run(struct xinb*, gchar*);
 
 #endif

@@ -10,6 +10,7 @@
 
 #define XINB_CONFIG_PATH ".xinb.ini"
 #define XINB_CONFIG_GROUP "xinb"
+#define XINB_SEND_BUF_LENGTH 256
 
 struct xinb *xinb = NULL;
 
@@ -101,9 +102,46 @@ void signals_handler(int signum)
     return;
 }
 
+void xinb_send_stream(struct xinb *x, FILE *stream)
+{
+    gchar *in_buf = NULL;
+    ssize_t in_buf_len = 0;
+
+    while(!feof_unlocked(stream)) {
+        gchar buf[XINB_SEND_BUF_LENGTH + 1];
+        size_t buf_len;
+        gint i;
+        
+        buf_len = fread_unlocked(buf, sizeof(gchar), XINB_SEND_BUF_LENGTH, stream);
+        if(!buf_len) {
+            if(ferror_unlocked(stream)) {
+                g_printerr("Error has been occured during reading.\n");
+            }
+            break;
+        }
+        buf[buf_len] = '\0';
+        
+        in_buf = g_realloc(in_buf, in_buf_len + buf_len);
+        for(i = 0; buf[i] != '\0'; i++) {
+            in_buf[in_buf_len++] = buf[i];
+        }
+    }
+
+    in_buf = g_realloc(in_buf, in_buf_len + 1);
+    in_buf[in_buf_len] = '\0';
+
+    x->to = g_strdup(g_hash_table_lookup(xinb->account, "owner"));
+    x->message = g_strdup_printf("Incoming message:\n%s", in_buf);
+    xmpp_send_message(x, LM_MESSAGE_SUB_TYPE_CHAT);
+    
+    g_free(in_buf);
+    return;
+}
+
 int main(int argc, char *argv[])
 {
-    int opt;
+    gint opt;
+    gint long_opts_len = 0;
     static struct option long_opts[] = {
         {"server", 1, NULL, 's'},
         {"username", 1, NULL, 'u'},
@@ -140,8 +178,9 @@ int main(int argc, char *argv[])
             xinb_release(xinb);
             exit(EXIT_FAILURE);
         }
+        long_opts_len++;
     }
-
+    
     if(!xinb_read_config(xinb)) {
         g_printerr("Config was not loaded.\n");
     }
@@ -164,6 +203,20 @@ int main(int argc, char *argv[])
         exit(EXIT_FAILURE);
     }
 
+    /* For sending messages from stdin if it's present. */
+    if(argc - 1 > long_opts_len * 2) {
+        FILE *stream;
+        gchar *input = argv[argc - 1];
+
+        stream = g_strcmp0(input, "-") ?
+            fopen(input, "r") : stdin;
+        if(!stream) {
+            g_printerr("Couldn't open input stream: '%s'.\n", input);
+            perror("fopen");
+        } else 
+            xinb_send_stream(xinb, stream);
+    }
+    
     lm_connection_register_message_handler(xinb->conn,
                     lm_message_handler_new(xmpp_receive_message, xinb, NULL),
                     LM_MESSAGE_TYPE_MESSAGE,
@@ -174,7 +227,7 @@ int main(int argc, char *argv[])
 
     xinb_release(xinb);
 
-    g_print("Screw you guys I am going home.\n");
+    g_print("\nScrew you guys I am going home.\n");
     
     return 0;
 }
