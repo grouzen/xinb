@@ -1,6 +1,6 @@
 TARGET = build/xinb
-OBJ = build/xinb.o build/xmpp.o
-HEADER = include/xinb.h
+OBJ = build/xinb.o build/xmpp.o build/commands.o
+HEADER = include/xinb.h include/commands.h include/xmpp.h
 DEBUG = -g
 LDFLAGS = -lloudmouth-1 -lglib-2.0
 CFLAGS = -I /usr/include/loudmouth-1.0 \
@@ -16,6 +16,9 @@ build/xinb.o: src/xinb.c $(HEADER)
 
 build/xmpp.o: src/xmpp.c $(HEADER)
 	gcc -c src/xmpp.c $(CFLAGS) $(DEBUG)
+
+build/commands.o: src/commands.c $(HEADER)
+	gcc -c src/commands.c $(CFLAGS) $(DEBUG)
 
 clean:
 	rm -fv $(OBJ) $(TARGET)
