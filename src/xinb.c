@@ -2,7 +2,6 @@
 #include <stdlib.h>
 #include <signal.h>
 #include <unistd.h>
-#include <getopt.h>
 #include <errno.h>
 #include <string.h>
 #include <loudmouth/loudmouth.h>
@@ -15,23 +14,13 @@
 #define XINB_CONFIG_GROUP "xinb"
 
 Xinb *xinb = NULL;
-static struct option long_opts[] = {
-    {"server", 1, NULL, 's'},
-    {"username", 1, NULL, 'u'},
-    {"password", 1, NULL, 'p'},
-    {"resource", 1, NULL, 'r'},
-    {"owner", 1, NULL, 'o'},
-    {"verbose", 0, NULL, 'v'},
-    {"daemon", 0, NULL, 'd'},
-    {0, 0, 0, 0}
-};
 
 void xinb_release(Xinb *x)
 {
     if(x != NULL) {
         if(x->conn &&
            !lm_connection_close(x->conn, &(x->gerror))) {
-            g_printerr("Couldn't close connection: %s.\n",
+            g_printerr("Couldn't close connection: %s\n",
                        x->gerror->message);
             g_free(x->gerror->message);
         }
@@ -66,7 +55,7 @@ static gboolean xinb_read_config(Xinb *x)
     config_file = g_strdup_printf("%s/%s", getenv("HOME"), XINB_CONFIG_PATH);
     if(!g_key_file_load_from_file(key_file, config_file,
                                   G_KEY_FILE_NONE, &(x->gerror))) {
-        g_printerr("Couldn't load config file '%s': %s.\n",
+        g_printerr("Couldn't load config file '%s': %s\n",
                    config_file, x->gerror->message);
         ret = FALSE;
         g_free(x->gerror->message);
@@ -74,7 +63,7 @@ static gboolean xinb_read_config(Xinb *x)
     }
 
     if(!g_key_file_has_group(key_file, XINB_CONFIG_GROUP)) {
-        g_printerr("Group '%s' not exists in config file '%s'.\n",
+        g_printerr("Group '%s' not exists in config file '%s'\n",
                    XINB_CONFIG_GROUP, config_file);
         ret = FALSE;
         g_free(x->gerror->message);
@@ -87,15 +76,11 @@ static gboolean xinb_read_config(Xinb *x)
         val = g_key_file_get_value(key_file, XINB_CONFIG_GROUP,
                                    keys[i], &(x->gerror));
         if(val == NULL) {
-            g_printerr("Couldn't get value from key '%s': %s.\n",
+            g_printerr("Couldn't get value from key '%s': %s\n",
                        keys[i], x->gerror->message);
             g_free(x->gerror->message);
         }
-
-        if(!g_hash_table_lookup(x->config, keys[i])) {
-            g_hash_table_insert(x->config, g_strdup(keys[i]), g_strdup(val));
-        }
-        
+        g_hash_table_insert(x->config, g_strdup(keys[i]), g_strdup(val));
         i++;
     }
     
@@ -119,53 +104,22 @@ void signals_handler(int signum)
 
 int main(int argc, char *argv[])
 {
-    gint opt;
-    gint long_opts_len = 0;
 
+    if(argc > 2) {
+        g_print("Usage: %s [-|file]\n", argv[0]);
+        exit(EXIT_FAILURE);
+    }
+    
     signal(SIGINT, signals_handler);
     
     xinb = g_malloc0(sizeof(Xinb));
     xinb->config = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, g_free);
-
-    /* What I suppose to do with this shit? */
-    while((opt = getopt_long_only(argc, argv, "", long_opts, NULL)) != -1) {
-        switch(opt) {
-        case 's':
-            g_hash_table_insert(xinb->config, "server", g_strdup(optarg));
-            break;
-        case 'u':
-            g_hash_table_insert(xinb->config, "username", g_strdup(optarg));
-            break;
-        case 'p':
-            g_hash_table_insert(xinb->config, "password", g_strdup(optarg));
-            break;
-        case 'r':
-            g_hash_table_insert(xinb->config, "resource", g_strdup(optarg));
-            break;
-        case 'o':
-            g_hash_table_insert(xinb->config, "owner", g_strdup(optarg));
-            break;
-        case 'v':
-            g_hash_table_insert(xinb->config, "verbose", g_strdup("on"));
-            break;
-        case 'd':
-            g_hash_table_insert(xinb->config, "daemon", g_strdup("on"));
-            break;
-        default:
-            xinb_release(xinb);
-            exit(EXIT_FAILURE);
-        }
-        long_opts_len++;
-    }
     
     if(!xinb_read_config(xinb)) {
-        log_record(xinb, LOGS_ERR, "Config was not loaded");
+        g_printerr("Config was not loaded\n");
+        xinb_release(xinb);
+        exit(EXIT_FAILURE);
     }
-
-    if(!g_hash_table_lookup(xinb->config, "verbose"))
-        g_hash_table_insert(xinb->config, "verbose", "off");
-    if(!g_hash_table_lookup(xinb->config, "daemon"))
-        g_hash_table_insert(xinb->config, "daemon", "off");
     
     xinb->logfd = log_open(xinb);
     if(!xinb->logfd) {
@@ -196,9 +150,9 @@ int main(int argc, char *argv[])
     }
 
     /* For sending messages from stdin if it's present. */
-    if(argc - 1 > long_opts_len * 2) {
+    if(argc > 1) {
         FILE *stream;
-        gchar *input = argv[argc - 1];
+        gchar *input = argv[1];
 
         stream = g_strcmp0(input, "-") ?
             fopen(input, "r") : stdin;
