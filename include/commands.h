@@ -2,30 +2,12 @@
 #define __COMMANDS_H__
 
 enum {
-    COMMAND_TYPE_EXEC = 0,
+    COMMAND_TYPE_NONE = -1,
+    COMMAND_TYPE_EXEC,
     COMMAND_TYPE_MESSAGE,
     COMMAND_TYPE_SHEDULE /* I'll think about it. */
 };
 
-struct command_exec {
-    gchar *file;
-    gchar **args;
-};
-
-struct command_message {
-    gchar *to;
-    gchar *body;
-};
-
-struct command {
-    gint type;
-    union {
-        struct command_exec *exec;
-        struct command_message *message;
-        /* TODO: struct command_shedule shedule. */
-    } value;
-};
-
-gboolean command_run(struct xinb*, gchar*);
+gboolean command_run(Xinb*, gchar*);
 
 #endif

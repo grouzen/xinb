@@ -3,104 +3,153 @@
 #include "../include/xinb.h"
 #include "../include/commands.h"
 #include "../include/xmpp.h"
+#include "../include/logs.h"
 
-gboolean xmpp_connect(struct xinb *xinb)
+gboolean xmpp_connect(Xinb *x)
 {
-    xinb->conn = lm_connection_new_with_context(g_hash_table_lookup(xinb->account, "server"),
-                                                xinb->context);
+    gchar *server = g_hash_table_lookup(x->config, "server");
+    gchar *username = g_hash_table_lookup(x->config, "username");
+    gchar *password = g_hash_table_lookup(x->config, "password");
+    gchar *resource = g_hash_table_lookup(x->config, "resource");
+    
+    x->conn = lm_connection_new_with_context(server, x->context);
 
-    if(!lm_connection_open_and_block(xinb->conn, &(xinb->gerror))) {
-        g_printerr("Couldn't open new connection to '%s': %s.\n",
-                   g_hash_table_lookup(xinb->account, "server"), xinb->gerror->message);
+    if(!lm_connection_open_and_block(x->conn, &(x->gerror))) {
+        log_record(x, LOGS_ERR, "Couldn't open new connection to '%s': %s",
+                   server, x->gerror->message);
+        g_free(x->gerror->message);
         return FALSE;
     }
 
-    if(!lm_connection_authenticate_and_block(xinb->conn,
-                                             g_hash_table_lookup(xinb->account, "username"),
-                                             g_hash_table_lookup(xinb->account, "password"),
-                                             g_hash_table_lookup(xinb->account, "resource"),
-                                             &(xinb->gerror))) {
-        g_printerr("Couldn't authenticate with '%s', '%s': %s.\n",
-                   g_hash_table_lookup(xinb->account, "username"),
-                   g_hash_table_lookup(xinb->account, "password"), xinb->gerror->message);
+    if(!lm_connection_authenticate_and_block(x->conn,  username, password,
+                                             resource, &(x->gerror))) {
+        log_record(x, LOGS_ERR, "Couldn't authenticate with '%s', '%s': %s",
+                   username, password, x->gerror->message);
+        g_free(x->gerror->message);
         return FALSE;
     }
 
-    g_print("'%s@%s/%s' has been connected.\n",
-            g_hash_table_lookup(xinb->account, "username"),
-            g_hash_table_lookup(xinb->account, "server"),
-            g_hash_table_lookup(xinb->account, "resource"));
+    log_record(x, LOGS_INFO, "'%s@%s/%s' has been connected",
+               username, server, resource);
 
-    xinb->state = LM_CONNECTION_STATE_AUTHENTICATED;
+    x->state = LM_CONNECTION_STATE_AUTHENTICATED;
     
     return TRUE;
 }
 
-gboolean xmpp_send_presence(struct xinb *xinb, LmMessageSubType subtype)
+gboolean xmpp_send_presence(Xinb *x, LmMessageSubType subtype)
 {
     LmMessage *m;
 
-    if(xinb->state != LM_CONNECTION_STATE_AUTHENTICATED) {
-        g_printerr("Unable to send presense: connection is not ready.\n");
+    if(x->state != LM_CONNECTION_STATE_AUTHENTICATED) {
+        log_record(x, LOGS_ERR,
+                   "Unable to send presense: not authenticated");
         return FALSE;
     }
 
     m = lm_message_new_with_sub_type(NULL, LM_MESSAGE_TYPE_PRESENCE, subtype);
-    if(!lm_connection_send(xinb->conn, m, &(xinb->gerror))) {
-        g_printerr("Unable to send presence of type '%d': %s.\n",
-                   subtype, xinb->gerror->message);
+    if(!lm_connection_send(x->conn, m, &(x->gerror))) {
+        log_record(x, LOGS_ERR, "Unable to send presence of type '%d': %s",
+                   subtype, x->gerror->message);
+        g_free(x->gerror->message);
         return FALSE;
     }
+
+    return TRUE;
 }
 
-gboolean xmpp_send_message(struct xinb *xinb, LmMessageSubType subtype)
+gboolean xmpp_send_message(Xinb *x, LmMessageSubType subtype)
 {
     LmMessage *m;
 
-    if(xinb->state != LM_CONNECTION_STATE_AUTHENTICATED) {
-        g_printerr("Unable to send message: connection is not ready.\n");
+    if(x->state != LM_CONNECTION_STATE_AUTHENTICATED) {
+        log_record(x, LOGS_ERR,
+                   "Unable to send message: not authenticated");
         return FALSE;
     }
-    
-    m = lm_message_new_with_sub_type(xinb->to, LM_MESSAGE_TYPE_MESSAGE, subtype);
-    lm_message_node_add_child(m->node, "body", xinb->message);
-    if(!lm_connection_send(xinb->conn, m, &(xinb->gerror))) {
-        g_printerr("Unable to send message to '%s': %s.\n",
-                   xinb->to, xinb->gerror->message);
+
+    m = lm_message_new_with_sub_type(x->to, LM_MESSAGE_TYPE_MESSAGE, subtype);
+    lm_message_node_add_child(m->node, "body", x->message);
+    if(!lm_connection_send(x->conn, m, &(x->gerror))) {
+        log_record(x, LOGS_ERR, "Unable to send message to '%s': %s",
+                   x->to, x->gerror->message);
+        g_free(x->gerror->message);
         lm_message_unref(m);
         return FALSE;
     }
     
     lm_message_unref(m);
-
     return TRUE;
 }
 
 LmHandlerResult xmpp_receive_message(LmMessageHandler *handler,
-                  LmConnection *conn, LmMessage *m, gpointer udata)
+                                     LmConnection *conn, LmMessage *m, gpointer udata)
 {
-    struct xinb *x = udata;
-    LmMessageNode *node_root, *node_body;
+    Xinb *x = udata;
+    LmMessageNode *body;
     
     if(x->state != LM_CONNECTION_STATE_AUTHENTICATED) {
-        g_printerr("Unable to receive message: connection is not ready.\n");
+        log_record(x, LOGS_ERR,
+                   "Unable to receive message: not authenticated");
         return LM_HANDLER_RESULT_REMOVE_MESSAGE;
     }
 
-    node_root = lm_message_get_node(m);
-    node_body = lm_message_node_find_child(node_root, "body");
+    body = lm_message_node_find_child(m->node, "body");
     
     if(lm_message_get_type(m) == LM_MESSAGE_TYPE_MESSAGE &&
        lm_message_get_sub_type(m) == LM_MESSAGE_SUB_TYPE_CHAT) {
-        g_print("The command has been received: '%s'.\n", node_body->value);
-        if(!command_run(x, node_body->value)) {
-            g_printerr("Command failure: '%s'.\n", node_body->value);
-        }
+        lm_message_node_set_raw_mode(body, TRUE);
+        log_record(x, LOGS_INFO,
+                   "The command has been received: '%s'", body->value);
+        
+        if(!command_run(x, body->value))
+            log_record(x, LOGS_ERR, "Command failure: '%s'", body->value);
     } else {
-        g_print("The message has been received.\n");
+        log_record(x, LOGS_INFO, "The message has been received");
     }
 
     lm_message_unref(m);
     
     return LM_HANDLER_RESULT_REMOVE_MESSAGE;
+}
+
+void xmpp_send_stream(Xinb *x, FILE *stream)
+{
+    gchar *in_buf = NULL;
+    size_t in_buf_len = 0;
+
+    while(!feof(stream)) {
+        gchar buf[256];
+        size_t buf_len;
+        gint i;
+        
+        buf_len = fread(buf, sizeof(gchar), 255, stream);
+        if(!buf_len) {
+            if(ferror(stream)) {
+                log_record(x, LOGS_ERR,
+                           "Error has been occured during reading stream");
+            }
+            break;
+        }
+        buf[buf_len] = '\0';
+        
+        in_buf = g_realloc(in_buf, in_buf_len + buf_len);
+        for(i = 0; buf[i] != '\0'; i++) {
+            in_buf[in_buf_len++] = buf[i];
+        }
+    }
+
+    in_buf = g_realloc(in_buf, in_buf_len + 1);
+    in_buf[in_buf_len] = '\0';
+
+    x->to = g_strdup(g_hash_table_lookup(x->config, "owner"));
+    x->message = g_strdup_printf("Incoming message:\n%s", in_buf);
+    xmpp_send_message(x, LM_MESSAGE_SUB_TYPE_CHAT);
+
+    g_free(x->to);
+    g_free(x->message);
+    if(in_buf)
+        g_free(in_buf);
+    
+    return;
 }

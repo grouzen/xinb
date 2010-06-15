@@ -1,18 +1,23 @@
 #ifndef __XINB_H__
 #define __XINB_H__
 
-struct xinb {
+#include <stdio.h>
+
+typedef struct {
     GMainLoop *loop;
     GMainContext *context;
-    GHashTable *account;
+    GHashTable *config;
     LmConnection *conn;
     GError *gerror;
     gchar *message;
     gchar *to;
     LmConnectionState state;
-};
+    FILE *logfd;
+} Xinb;
 
-void xinb_release(struct xinb*);
-void xinb_send_stream(struct xinb*, FILE*);
+void xinb_release(Xinb*);
+
+#define XINB_DIR ".xinb"
+#define XINB_PROGRAM_NAME "xinb"
 
 #endif
