@@ -9,10 +9,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <signal.h>
-#include <unistd.h>
-#include <errno.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <unistd.h>
+#include <errno.h>
 #include <string.h>
 #include <loudmouth/loudmouth.h>
 
@@ -68,21 +68,21 @@ static gboolean xinb_read_config(Xinb *x)
                                   G_KEY_FILE_NONE, &(x->gerror))) {
         g_printerr("Couldn't load config file '%s': %s\n",
                    config_file, x->gerror->message);
-        g_error_free(x->gerror);
-        x->gerror = NULL;
-        ret = FALSE;
-        goto out;
-    }
-
-    if(!g_key_file_has_group(key_file, XINB_CONFIG_GROUP)) {
-        g_printerr("Group '%s' not exists in config file '%s'\n",
-                   XINB_CONFIG_GROUP, config_file);
+        g_clear_error(&(x->gerror));
         ret = FALSE;
         goto out;
     }
 
     /* TODO: error handling? */
     keys = g_key_file_get_keys(key_file, XINB_CONFIG_GROUP, NULL, &(x->gerror));
+    if(keys == NULL &&
+       x->gerror->code == G_KEY_FILE_ERROR_GROUP_NOT_FOUND) {
+        g_printerr("Error while reading config: %s\n",
+                   x->gerror->message);
+        g_clear_error(&(x->gerror));
+        ret = FALSE;
+        goto out;
+    }
     
     while(keys[i]) {
         val = g_key_file_get_value(key_file, XINB_CONFIG_GROUP,
@@ -90,8 +90,7 @@ static gboolean xinb_read_config(Xinb *x)
         if(val == NULL) {
             g_printerr("Couldn't get value from key '%s': %s\n",
                        keys[i], x->gerror->message);
-            g_error_free(x->gerror);
-            x->gerror = NULL;
+            g_clear_error(&(x->gerror));
         }
         g_hash_table_insert(x->config, g_strdup(keys[i]), g_strdup(val));
         i++;
@@ -109,6 +108,16 @@ static gboolean xinb_read_config(Xinb *x)
 
 void signals_handler(int signum)
 {
+    /* Say bye-bye, good bot. */
+    xinb->to = g_strdup(g_hash_table_lookup(xinb->config, "owner"));
+    if(signum == SIGINT)
+        xinb->message = g_strdup("I've received SIGINT, who turn off me?");
+    else if(signum == SIGTERM)
+        xinb->message = g_strdup("I've received SIGTERM, see you later!");
+    xmpp_send_message(xinb, LM_MESSAGE_TYPE_MESSAGE);
+    g_free(xinb->to);
+    g_free(xinb->message);
+    
     g_main_loop_quit(xinb->loop);
 
     return;
@@ -118,8 +127,9 @@ void signals_handler(int signum)
 int main(int argc, char *argv[])
 {
     LmMessageHandler *h_message, *h_iq;
-    struct stat xinb_dir;
+    struct stat stat_buf;
     gchar *xinb_dir_path;
+    gint stat_ret;
     
     if(argc > 2) {
         g_print("Usage: %s [-|file]\n", argv[0]);
@@ -132,7 +142,22 @@ int main(int argc, char *argv[])
     xinb = g_malloc0(sizeof(Xinb));
     xinb->config = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, g_free);
 
-    //xinb_dir_path = g_strdup_printf("%s/%s"
+    /* Create new directory XINB_DIR in $HOME if it doesn't exist.
+       Note: in case directory doesn't exist you should create
+       config XINB_CONFIG_PATH.
+    */
+    xinb_dir_path = g_strdup_printf("%s/%s", getenv("HOME"), XINB_DIR);
+    stat_ret = stat(xinb_dir_path, &stat_buf);
+    if(stat_ret < 0 || !S_ISDIR(stat_buf.st_mode)) {
+        if(mkdir(xinb_dir_path, S_IRWXU | S_IRGRP |
+                 S_IWGRP | S_IROTH | S_IWOTH) < 0) {
+            g_printerr("Couldn't create directory: %s\n", strerror(errno));
+            exit(EXIT_FAILURE);
+        }
+        g_print("New directory has been created: '%s'\n", xinb_dir_path);
+    }
+    g_free(xinb_dir_path);
+    
     if(!xinb_read_config(xinb)) {
         g_printerr("Config was not loaded\n");
         xinb_release(xinb);
@@ -192,6 +217,13 @@ int main(int argc, char *argv[])
     lm_connection_register_message_handler(xinb->conn, h_iq,
                                            LM_MESSAGE_TYPE_IQ,
                                            LM_HANDLER_PRIORITY_NORMAL);
+
+    /* Just say hello ^_^. */
+    xinb->to = g_strdup(g_hash_table_lookup(xinb->config, "owner"));
+    xinb->message = g_strdup_printf("I'm here, what do you want %s?", xinb->to);
+    xmpp_send_message(xinb, LM_MESSAGE_TYPE_MESSAGE);
+    g_free(xinb->to);
+    g_free(xinb->message);
     
     xinb->loop = g_main_loop_new(NULL, FALSE);
     g_main_loop_run(xinb->loop);

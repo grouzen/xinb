@@ -71,7 +71,9 @@ gboolean xmpp_send_presence(Xinb *x, LmMessageSubType subtype)
     return TRUE;
 }
 
-/* TODO: large messages are not sent. (?) */
+/* TODO: large messages are not sent. (?)
+         maybe I'll be splitting messages.
+ */
 gboolean xmpp_send_message(Xinb *x, LmMessageSubType subtype)
 {
     LmMessage *m;
@@ -101,7 +103,7 @@ LmHandlerResult xmpp_receive_iq(LmMessageHandler *handler,
                         LmConnection *conn, LmMessage *m, gpointer udata)
 {
     Xinb *x = udata;
-
+    //g_print("IQ get query received...\n");
     return LM_HANDLER_RESULT_REMOVE_MESSAGE;
 }
                                 
