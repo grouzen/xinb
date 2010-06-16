@@ -1,3 +1,8 @@
+/*
+   TODO:
+     troubles with code pages for syslog
+*/
+
 #include <stdio.h>
 #include <errno.h>
 #include <string.h>

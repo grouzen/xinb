@@ -1,8 +1,18 @@
+/*
+                 XINB is a bot ;>
+   It's configured only with config file, without command line
+   options, because I hate all these switch statements,
+   I think it's ugly. And yes, I hate glib's mechanism of
+   the options parsing.
+*/
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <signal.h>
 #include <unistd.h>
 #include <errno.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 #include <string.h>
 #include <loudmouth/loudmouth.h>
 
@@ -22,8 +32,9 @@ void xinb_release(Xinb *x)
            !lm_connection_close(x->conn, &(x->gerror))) {
             g_printerr("Couldn't close connection: %s\n",
                        x->gerror->message);
-            g_free(x->gerror->message);
+            g_clear_error(&(x->gerror));
         }
+        x->state = LM_CONNECTION_STATE_CLOSED;
 
         log_close(x);
         
@@ -33,10 +44,10 @@ void xinb_release(Xinb *x)
             g_main_loop_unref(x->loop);
         if(x->context)
             g_main_context_unref(x->context);
-        if(x->gerror)
-            g_error_free(x->gerror);
         if(x->config)
             g_hash_table_destroy(x->config);
+        if(x->gerror)
+            g_clear_error(&(x->gerror));
         
         g_free(x);
     }
@@ -57,8 +68,9 @@ static gboolean xinb_read_config(Xinb *x)
                                   G_KEY_FILE_NONE, &(x->gerror))) {
         g_printerr("Couldn't load config file '%s': %s\n",
                    config_file, x->gerror->message);
+        g_error_free(x->gerror);
+        x->gerror = NULL;
         ret = FALSE;
-        g_free(x->gerror->message);
         goto out;
     }
 
@@ -66,10 +78,10 @@ static gboolean xinb_read_config(Xinb *x)
         g_printerr("Group '%s' not exists in config file '%s'\n",
                    XINB_CONFIG_GROUP, config_file);
         ret = FALSE;
-        g_free(x->gerror->message);
         goto out;
     }
 
+    /* TODO: error handling? */
     keys = g_key_file_get_keys(key_file, XINB_CONFIG_GROUP, NULL, &(x->gerror));
     
     while(keys[i]) {
@@ -78,7 +90,8 @@ static gboolean xinb_read_config(Xinb *x)
         if(val == NULL) {
             g_printerr("Couldn't get value from key '%s': %s\n",
                        keys[i], x->gerror->message);
-            g_free(x->gerror->message);
+            g_error_free(x->gerror);
+            x->gerror = NULL;
         }
         g_hash_table_insert(x->config, g_strdup(keys[i]), g_strdup(val));
         i++;
@@ -104,17 +117,22 @@ void signals_handler(int signum)
 
 int main(int argc, char *argv[])
 {
-
+    LmMessageHandler *h_message, *h_iq;
+    struct stat xinb_dir;
+    gchar *xinb_dir_path;
+    
     if(argc > 2) {
         g_print("Usage: %s [-|file]\n", argv[0]);
         exit(EXIT_FAILURE);
     }
     
     signal(SIGINT, signals_handler);
+    signal(SIGTERM, signals_handler);
     
     xinb = g_malloc0(sizeof(Xinb));
     xinb->config = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, g_free);
-    
+
+    //xinb_dir_path = g_strdup_printf("%s/%s"
     if(!xinb_read_config(xinb)) {
         g_printerr("Config was not loaded\n");
         xinb_release(xinb);
@@ -165,15 +183,21 @@ int main(int argc, char *argv[])
         xinb_release(xinb);
         exit(EXIT_SUCCESS);
     }
-    
-    lm_connection_register_message_handler(xinb->conn,
-                    lm_message_handler_new(xmpp_receive_message, xinb, NULL),
-                    LM_MESSAGE_TYPE_MESSAGE,
-                    LM_HANDLER_PRIORITY_NORMAL);
 
+    h_message = lm_message_handler_new(xmpp_receive_command, xinb, NULL);
+    lm_connection_register_message_handler(xinb->conn, h_message,
+                                           LM_MESSAGE_TYPE_MESSAGE,
+                                           LM_HANDLER_PRIORITY_NORMAL);
+    h_iq = lm_message_handler_new(xmpp_receive_iq, xinb, NULL);
+    lm_connection_register_message_handler(xinb->conn, h_iq,
+                                           LM_MESSAGE_TYPE_IQ,
+                                           LM_HANDLER_PRIORITY_NORMAL);
+    
     xinb->loop = g_main_loop_new(NULL, FALSE);
     g_main_loop_run(xinb->loop);
 
+    lm_message_handler_unref(h_iq);
+    lm_message_handler_unref(h_message);
     log_record(xinb, LOGS_INFO, "Screw you guys I am going home");
     
     xinb_release(xinb);

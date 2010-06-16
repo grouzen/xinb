@@ -7,11 +7,12 @@
 #include "../include/xinb.h"
 #include "../include/xmpp.h"
 #include "../include/logs.h"
+#include "../include/error.h"
 #include "../include/commands.h"
 
 #define COMMAND_MAX_LENGTH 1024
 
-static int command_get_type(gchar *c)
+static int command_get_type(Xinb *x, gchar *c)
 {
     gint type;
     
@@ -31,15 +32,23 @@ static int command_get_type(gchar *c)
             type = COMMAND_TYPE_SHEDULE;
             break;
         default:
-            g_printerr("Unknown command type: '%c'.\n", c[1]);
+            log_record(x, LOGS_ERR, "Unknown command type: '%c'", c[1]);
+            g_set_error(&(x->gerror), XINB_ERROR, XINB_COMMAND_GET_TYPE_ERROR,
+                        "Unknown command type: '%c'", c[1]);
             type = COMMAND_TYPE_NONE;
         }
-    } else
+    } else {
+        /* TODO: implement :h command. */
+        log_record(x, LOGS_ERR, "The command syntax error");
+        g_set_error(&(x->gerror), XINB_ERROR, XINB_COMMAND_GET_TYPE_ERROR,
+                    "The command syntax error, use ':h' for getting help");
         type = COMMAND_TYPE_NONE;
+    }
     
     return type;
 }
 
+/* TODO: get stderr from popen. */
 static gboolean command_exec(Xinb *x, gchar *command)
 {
     FILE *s;
@@ -47,11 +56,16 @@ static gboolean command_exec(Xinb *x, gchar *command)
     s = popen(command, "r");
     if(!s) {
         log_record(x, LOGS_ERR, "Couldn't exec command: %s", strerror(errno));
+        g_set_error(&(x->gerror), 
+                    XINB_ERROR,
+                    XINB_COMMAND_EXEC_ERROR,
+                    "Couldn't exec command: %s", strerror(errno));
+                                        
         return FALSE;
     }
 
     xmpp_send_stream(x, s);
-
+    
     pclose(s);
     return TRUE;
 }
@@ -60,6 +74,8 @@ gboolean command_run(Xinb *x, gchar *c)
 {
     gint type;
 
+    log_record(x, LOGS_INFO, "Trying to run command: '%s'", c);
+    
     if(strlen(c) > COMMAND_MAX_LENGTH) {
         log_record(x, LOGS_ERR,
                    "The possible length of the command is exceeded: '%d'",
@@ -68,10 +84,10 @@ gboolean command_run(Xinb *x, gchar *c)
         goto send_error;
     }
     
-    type = command_get_type(c);
+    type = command_get_type(x, c);
     if(type == COMMAND_TYPE_NONE) {
-        log_record(x, LOGS_ERR, "Unknown command type");
-        x->message = g_strdup("Unknown command type");
+        x->message = g_strdup(x->gerror->message);
+        g_clear_error(&(x->gerror));
         goto send_error;
     }
 
@@ -83,7 +99,8 @@ gboolean command_run(Xinb *x, gchar *c)
 
     if(type == COMMAND_TYPE_EXEC) {
         if(!command_exec(x, c)) {
-            x->message = g_strdup("The errors occured during exec command");
+            x->message = g_strdup(x->gerror->message);
+            g_clear_error(&(x->gerror));
             goto send_error;
         }
     }
