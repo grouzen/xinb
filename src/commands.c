@@ -55,7 +55,6 @@ static gboolean command_exec(Xinb *x, gchar *command)
 
     s = popen(command, "r");
     if(!s) {
-        log_record(x, LOGS_ERR, "Couldn't exec command: %s", strerror(errno));
         g_set_error(&(x->gerror), 
                     XINB_ERROR,
                     XINB_COMMAND_EXEC_ERROR,
@@ -99,6 +98,7 @@ gboolean command_run(Xinb *x, gchar *c)
 
     if(type == COMMAND_TYPE_EXEC) {
         if(!command_exec(x, c)) {
+            log_record(x, LOGS_ERR, x->gerror->message);
             x->message = g_strdup(x->gerror->message);
             g_clear_error(&(x->gerror));
             goto send_error;

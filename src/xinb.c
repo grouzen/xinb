@@ -19,6 +19,7 @@
 #include "../include/xinb.h"
 #include "../include/xmpp.h"
 #include "../include/logs.h"
+#include "../include/error.h"
 
 #define XINB_CONFIG_PATH XINB_DIR "/.xinb.conf"
 #define XINB_CONFIG_GROUP "xinb"
@@ -123,6 +124,48 @@ void signals_handler(int signum)
     return;
 }
 
+gboolean xinb_daemonize(Xinb *x)
+{
+    pid_t pid, sid;
+
+    log_record(x, LOGS_INFO, "Trying to daemonize...");
+    
+    pid = fork();
+    if(pid < 0) {
+        g_set_error(&(x->gerror), XINB_ERROR, XINB_XINB_DAEMONIZE_ERROR,
+                    "Daemonize failed: %s", strerror(errno));
+        return FALSE;
+    }
+
+    /* Function that called must check on
+       x->gerror == NULL, if true - error,
+       else parent process must just terminate.
+    */
+    if(pid > 0) {
+        return FALSE;
+    }
+
+    umask(0);
+
+    sid = setsid();
+    if(sid < 0) {
+        g_set_error(&(x->gerror), XINB_ERROR, XINB_XINB_DAEMONIZE_ERROR,
+                    "Couldn't set session id: %s", strerror(errno));
+        return FALSE;
+    }
+
+    if(chdir("/") < 0) {
+        g_set_error(&(x->gerror), XINB_ERROR, XINB_XINB_DAEMONIZE_ERROR,
+                    "Couldn't change directory: %s", strerror(errno));
+        return FALSE;
+    }
+
+    close(STDIN_FILENO);
+    close(STDOUT_FILENO);
+    close(STDERR_FILENO);
+
+    return TRUE;
+}
 
 int main(int argc, char *argv[])
 {
@@ -149,9 +192,10 @@ int main(int argc, char *argv[])
     xinb_dir_path = g_strdup_printf("%s/%s", getenv("HOME"), XINB_DIR);
     stat_ret = stat(xinb_dir_path, &stat_buf);
     if(stat_ret < 0 || !S_ISDIR(stat_buf.st_mode)) {
-        if(mkdir(xinb_dir_path, S_IRWXU | S_IRGRP |
-                 S_IWGRP | S_IROTH | S_IWOTH) < 0) {
+        if(mkdir(xinb_dir_path,
+                 S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH) < 0) {
             g_printerr("Couldn't create directory: %s\n", strerror(errno));
+            xinb_release(xinb);
             exit(EXIT_FAILURE);
         }
         g_print("New directory has been created: '%s'\n", xinb_dir_path);
@@ -183,6 +227,21 @@ int main(int argc, char *argv[])
         exit(EXIT_FAILURE);
     }
     log_record(xinb, LOGS_INFO, "Config has been loaded");
+
+    if(!g_strcmp0(g_hash_table_lookup(xinb->config, "daemon"), "on") &&
+       !xinb_daemonize(xinb)) {
+        if(xinb->gerror) {
+            log_record(xinb, LOGS_ERR, xinb->gerror->message);
+            log_record(xinb, LOGS_INFO, "Daemon terminating...");
+            g_clear_error(&(xinb->gerror));
+            xinb_release(xinb);
+            exit(EXIT_FAILURE);
+        }
+
+        log_record(xinb, LOGS_INFO, "Parent process terminating...");
+        xinb_release(xinb);
+        exit(EXIT_SUCCESS);
+    }
     
     xinb->context = g_main_context_default();
     
@@ -192,8 +251,10 @@ int main(int argc, char *argv[])
         exit(EXIT_FAILURE);
     }
 
-    /* For sending messages from stdin if it's present. */
-    if(argc > 1) {
+    /* For sending messages from stdin if it's present.
+       It's forbidden for daemon.
+     */
+    if(argc > 1 && g_strcmp0(g_hash_table_lookup(xinb->config, "daemon"), "on")) {
         FILE *stream;
         gchar *input = argv[1];
 

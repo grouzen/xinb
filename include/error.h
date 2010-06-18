@@ -3,7 +3,8 @@
 
 enum {
     XINB_COMMAND_EXEC_ERROR,
-    XINB_COMMAND_GET_TYPE_ERROR
+    XINB_COMMAND_GET_TYPE_ERROR,
+    XINB_XINB_DAEMONIZE_ERROR
 };
 
 GQuark xinb_error_quark(void);

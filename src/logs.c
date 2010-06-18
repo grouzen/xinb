@@ -1,8 +1,3 @@
-/*
-   TODO:
-     troubles with code pages for syslog
-*/
-
 #include <stdio.h>
 #include <errno.h>
 #include <string.h>
@@ -73,7 +68,7 @@ void log_record(Xinb *x, gint level, gchar *format, ...)
     
     if(!g_strcmp0(verbose, "on")) {
         if(!g_strcmp0(daemon, "on")) {
-            syslog(level, format, ap);
+            vsyslog(level, format, ap);
         } else {
             if(level == LOGS_INFO)
                 g_print("%s\n", out);
@@ -81,7 +76,8 @@ void log_record(Xinb *x, gint level, gchar *format, ...)
                 g_printerr("%s\n", out);
         }
     }
-
+    va_end(ap);
+    
     if(level == LOGS_INFO)
         status = g_strdup("[INFO]");
     else if(level == LOGS_ERR)
