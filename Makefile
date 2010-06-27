@@ -1,32 +1,16 @@
-TARGET = build/xinb
-OBJ = build/xinb.o build/xmpp.o build/commands.o build/logs.o build/error.o
-HEADER = include/xinb.h include/commands.h include/xmpp.h \
-	include/logs.h include/error.h
-DEBUG = -g
-LDFLAGS = -lloudmouth-1 -lglib-2.0
-CFLAGS = -I /usr/include/loudmouth-1.0 \
-	`pkg-config --libs --cflags glib-2.0` \
-	-I /usr/lib/glib/include
+target = src/xinb
+objs = src/xinb.o src/xmpp.o src/commands.o src/logs.o src/error.o
+headers = include/xinb.h include/commands.h include/xmpp.h \
+			include/logs.h include/error.h
 
-all: $(OBJ) $(HEADER)
-	mv -v *.o build/
-	gcc -o $(TARGET) $(OBJ) $(LDFLAGS) $(CFLAGS) $(DEBUG)
+LDFLAGS += `pkg-config --libs loudmouth-1.0`
+CFLAGS += `pkg-config --cflags loudmouth-1.0` -g3
 
-build/xinb.o: src/xinb.c $(HEADER)
-	gcc -c src/xinb.c $(CFLAGS) $(DEBUG)
+.PHONY: all clean
+all: $(objs)
+	gcc -o $(target) $(objs) $(LDFLAGS) $(CFLAGS)
 
-build/xmpp.o: src/xmpp.c $(HEADER)
-	gcc -c src/xmpp.c $(CFLAGS) $(DEBUG)
-
-build/commands.o: src/commands.c $(HEADER)
-	gcc -c src/commands.c $(CFLAGS) $(DEBUG)
-
-build/logs.o: src/logs.c $(HEADER)
-	gcc -c src/logs.c $(CFLAGS) $(DEBUG)
-
-build/error.o: src/error.c $(HEADER)
-	gcc -c src/error.c $(CFLAGS) $(DEBUG)
+$(objs): $(headers)
 
 clean:
-	rm -fv $(OBJ) $(TARGET)
-
+	-rm -fv $(objs) $(target) 
