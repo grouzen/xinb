@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
+#include <time.h>
 #include <unistd.h>
 #include <loudmouth/loudmouth.h>
 
@@ -29,7 +30,7 @@ static int command_get_type(Xinb *x, gchar *c)
             type = COMMAND_TYPE_MESSAGE;
             break;
         case 's':
-            type = COMMAND_TYPE_SHEDULE;
+            type = COMMAND_TYPE_SERVICE;
             break;
         default:
             log_record(x, LOGS_ERR, "Unknown command type: '%c'", c[1]);
@@ -69,6 +70,56 @@ static gboolean command_exec(Xinb *x, gchar *command)
     return TRUE;
 }
 
+static gchar *command_service_uptime(Xinb *x)
+{
+    gchar *ret;
+    gint uptime = time(NULL) - x->start_time;
+    gint hours = 0, minutes = 0, seconds = 0;
+
+    if(uptime - 3600 >= 0) {
+        do {
+            uptime -= 3600;
+            hours++;
+        } while(uptime - 3600 >= 0);
+    }
+    if(uptime - 60 >= 0) {
+        do {
+            uptime -= 60;
+            minutes++;
+        } while(uptime - 60 >= 0);
+    }
+
+    seconds = uptime;
+    
+    ret = g_strdup_printf("%dh %dm %ds", hours, minutes, seconds);
+    
+    return ret;
+}
+
+static gchar *command_service_help(void)
+{
+    gchar *ret;
+    ret = g_strdup("Avaliable commands:\n    uptime\n");
+    
+    return ret;
+}
+
+static gboolean command_service(Xinb *x, gchar *command)
+{
+    if(!g_strcmp0("uptime", command)) {
+        x->message = command_service_uptime(x);
+    } else {
+        x->message = command_service_help();
+    }
+
+    x->to = g_strdup(g_hash_table_lookup(x->config, "owner"));
+    xmpp_send_message(x, LM_MESSAGE_SUB_TYPE_CHAT);
+    g_free(x->to);
+    g_free(x->message);
+    
+    return TRUE;
+}
+
 gboolean command_run(Xinb *x, gchar *c)
 {
     gint type;
@@ -103,6 +154,8 @@ gboolean command_run(Xinb *x, gchar *c)
             g_clear_error(&(x->gerror));
             goto send_error;
         }
+    } else if(type == COMMAND_TYPE_SERVICE) {
+        command_service(x, c);
     }
 
     return TRUE;

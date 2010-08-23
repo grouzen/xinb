@@ -14,6 +14,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <string.h>
+#include <time.h>
 #include <loudmouth/loudmouth.h>
 
 #include "../include/xinb.h"
@@ -285,7 +286,8 @@ int main(int argc, char *argv[])
     xmpp_send_message(xinb, LM_MESSAGE_TYPE_MESSAGE);
     g_free(xinb->to);
     g_free(xinb->message);
-    
+
+    xinb->start_time = time(NULL);
     xinb->loop = g_main_loop_new(NULL, FALSE);
     g_main_loop_run(xinb->loop);
 

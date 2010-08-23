@@ -11,6 +11,7 @@ typedef struct {
     GError *gerror;
     gchar *message;
     gchar *to;
+    gint start_time;
     LmConnectionState state;
     FILE *logfd;
 } Xinb;
