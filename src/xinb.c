@@ -215,6 +215,15 @@ int main(int argc, char *argv[])
         exit(EXIT_FAILURE);
     }
 
+    if(argc > 1 &&
+       !g_strcmp0(g_hash_table_lookup(xinb->config, "daemon"), "on")) {
+        g_printerr("Error has been occured. See log.\n");
+        log_record(xinb, LOGS_ERR,
+                   "It's impossible to send message from stream on a 'daemon' mode");
+        xinb_release(xinb);
+        exit(EXIT_FAILURE);
+    }
+    
     log_record(xinb, LOGS_INFO, "Starting...");
 
     if(!g_hash_table_lookup(xinb->config, "server") ||
@@ -255,7 +264,7 @@ int main(int argc, char *argv[])
     /* For sending messages from stdin if it's present.
        It's forbidden for daemon.
      */
-    if(argc > 1 && g_strcmp0(g_hash_table_lookup(xinb->config, "daemon"), "on")) {
+    if(argc > 1) {
         FILE *stream;
         gchar *input = argv[1];
 
