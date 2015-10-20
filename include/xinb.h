@@ -12,6 +12,8 @@ typedef struct {
     gchar *message;
     gchar *to;
     gint start_time;
+    gchar *cwd;
+    GSList* mlog;
     LmConnectionState state;
     FILE *logfd;
 } Xinb;

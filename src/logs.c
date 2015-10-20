@@ -20,7 +20,7 @@ FILE *log_open(Xinb *x)
     if(!g_strcmp0(verbose, "on") && !g_strcmp0(daemon, "on"))
         openlog(XINB_PROGRAM_NAME, LOG_PID, LOG_USER);
 
-    log_name = g_strdup_printf("%s/%s/xinb.log", getenv("HOME"), XINB_DIR);
+    log_name = g_strdup_printf("%s/%s/xinb.log", "/home/grouzen" /* getenv("HOME") */, XINB_DIR);
     
     fd = fopen(log_name, "a");
     if(!fd) {
@@ -32,8 +32,10 @@ FILE *log_open(Xinb *x)
                        log_name, strerror(errno));
         }
     }
-    
     g_free(log_name);
+
+    x->mlog = NULL;
+    
     return fd;
 }
 
@@ -50,6 +52,8 @@ void log_close(Xinb *x)
     if(x->logfd && fclose(x->logfd) == EOF)
         g_printerr("Couldn't close log file: %s.\n", strerror(errno));
 
+    g_slist_free(x->mlog);
+    
     return;
 }
 
@@ -90,7 +94,10 @@ void log_record(Xinb *x, gint level, gchar *format, ...)
                              date->tm_hour, date->tm_min, date->tm_sec,
                              status, out);
     fputs(record, x->logfd);
-    
+    fflush(x->logfd);
+
+    x->mlog = g_slist_append(x->mlog, record);
+        
     g_free(status);
     g_free(record);
     return;

@@ -18,17 +18,17 @@ static int command_get_type(Xinb *x, gchar *c)
     gint type;
     
     /* Commands examples:
-       :e netstat -tuna
-       :m xxx@xmpp.com hello!
+       :$ netstat -tuna
+       :@ xxx@xmpp.com hello!
     */
     if(strlen(c) > 1 && c[0] == ':') {
         switch(c[1]) {
-        case 'e':
+        case '$':
             type = COMMAND_TYPE_EXEC;
             break;
-        case 'm':
-            type = COMMAND_TYPE_MESSAGE;
-            break;
+        /* case '@': */
+        /*     type = COMMAND_TYPE_MESSAGE; */
+        /*     break; */
         case 's':
             type = COMMAND_TYPE_SERVICE;
             break;
@@ -99,7 +99,22 @@ static gchar *command_service_uptime(Xinb *x)
 static gchar *command_service_help(void)
 {
     gchar *ret;
-    ret = g_strdup("Avaliable commands:\n    uptime\n");
+    ret = g_strdup("Avaliable commands:\n    uptime\n    log\n");
+    
+    return ret;
+}
+
+static gchar *command_service_log(Xinb *x, int lines) {
+    gint  size = 256 * lines;
+    gchar *ret = g_new0(gchar, size); // 30 lines
+
+    log_record(x, LOG_INFO, "log length: %d\n", g_slist_length(x->mlog));
+    
+    for(guint i = 0; i < g_slist_length(x->mlog); i++) {
+        gchar *data = g_slist_nth_data(x->mlog, i);
+        log_record(x, LOG_INFO, "log item: %s\n", data);
+        g_strlcat(ret, data, size);
+    }
     
     return ret;
 }
@@ -108,6 +123,8 @@ static gboolean command_service(Xinb *x, gchar *command)
 {
     if(!g_strcmp0("uptime", command)) {
         x->message = command_service_uptime(x);
+    } else if(!g_strcmp0("log", command)) {
+        x->message = command_service_log(x, 30);
     } else {
         x->message = command_service_help();
     }

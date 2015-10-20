@@ -50,6 +50,8 @@ void xinb_release(Xinb *x)
             g_hash_table_destroy(x->config);
         if(x->gerror)
             g_clear_error(&(x->gerror));
+        if(x->cwd)
+            g_free(x->cwd);
         
         g_free(x);
     }
@@ -252,6 +254,15 @@ int main(int argc, char *argv[])
         xinb_release(xinb);
         exit(EXIT_SUCCESS);
     }
+
+    /* Determining current working directory */
+    gchar *cwd = g_strdup(g_hash_table_lookup(xinb->config, "cwd"));
+    xinb->cwd = (cwd != NULL) ? cwd : getenv("HOME");
+
+    if(chdir(xinb->cwd) == -1) {
+        log_record(xinb, LOGS_ERR, strerror(errno));
+    }
+    log_record(xinb, LOGS_INFO, "Xinb's CWD is %s", xinb->cwd);
     
     xinb->context = g_main_context_default();
     

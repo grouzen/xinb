@@ -4,7 +4,7 @@ headers = include/xinb.h include/commands.h include/xmpp.h \
 			include/logs.h include/error.h
 
 LDFLAGS += `pkg-config --libs loudmouth-1.0`
-CFLAGS += `pkg-config --cflags loudmouth-1.0` -g3
+CFLAGS += `pkg-config --cflags loudmouth-1.0` -g3 -std=c99
 
 .PHONY: all clean
 all: $(objs)
